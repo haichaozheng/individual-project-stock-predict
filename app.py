@@ -8,16 +8,25 @@
 
 from pathlib import Path
 
+import matplotlib.font_manager as fm
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import streamlit as st
 from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
-plt.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "DejaVu Sans"]
+# 中文显示：优先用仓库自带的开源字体（Noto Sans CJK，OFL 协议可自由分发）。
+# 本地 Windows 有系统字体也能画，但 Streamlit Cloud 等 Linux 环境没有
+# 微软雅黑/黑体，不自带字体的话图里中文会变成方框。
+_BUNDLED_FONT = Path(__file__).resolve().parent / "fonts" / "NotoSansCJKsc-Regular.otf"
+if _BUNDLED_FONT.exists():
+    fm.fontManager.addfont(str(_BUNDLED_FONT))
+    plt.rcParams["font.family"] = ["Noto Sans CJK SC", "DejaVu Sans"]
+else:
+    plt.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "DejaVu Sans"]
 plt.rcParams["axes.unicode_minus"] = False
 
 ALL_FEATURES = [
@@ -257,12 +266,93 @@ if normalize:
 st.subheader("4. sklearn 线性回归")
 model = LinearRegression()
 model.fit(X_train, y_train)
-train_r2 = r2_score(y_train, model.predict(X_train))
-test_r2 = r2_score(y_test, model.predict(X_test))
+pred_train = model.predict(X_train)
+pred_test = model.predict(X_test)
 
-c1, c2 = st.columns(2)
-c1.metric("训练集 R2", f"{train_r2:.4f}")
-c2.metric("测试集 R2", f"{test_r2:.4f}")
+
+def metric_row(y_true, y_hat):
+    """一组常用的回归评估指标。"""
+    mse = mean_squared_error(y_true, y_hat)
+    return {
+        "R²": r2_score(y_true, y_hat),
+        "MSE": mse,
+        "RMSE": np.sqrt(mse),
+        "MAE": mean_absolute_error(y_true, y_hat),
+    }
+
+
+metrics_df = pd.DataFrame({
+    "训练集": metric_row(y_train, pred_train),
+    "测试集": metric_row(y_test, pred_test),
+})
+train_r2 = metrics_df.loc["R²", "训练集"]
+test_r2 = metrics_df.loc["R²", "测试集"]
+
+st.dataframe(metrics_df.style.format("{:.6f}"), use_container_width=True)
+
+with st.expander("📐 评估指标：公式与读法（R² / MSE / RMSE / MAE）", expanded=False):
+    st.markdown(
+        r"""
+#### R²（决定系数）——"比笨基准好多少"
+
+$$R^2 = 1 - \frac{\overbrace{\sum_i (y_i - \hat{y}_i)^2}^{\text{模型的误差}}}
+{\underbrace{\sum_i (y_i - \bar{y})^2}_{\text{笨基准的误差}}}
+= 1 - \frac{MSE_{模型}}{\mathrm{Var}(y_{测试集})}$$
+
+- **分母**：不加任何特征、对每个样本都闭眼猜均值 $\bar{y}$ 所犯的错
+- **分子**：训练出的模型所犯的错
+- R² 回答的问题是：**模型比"猜均值"好多少？**
+
+| R² | 含义 |
+|---|---|
+| 1 | 完美预测 |
+| 0.27（本案例振幅） | 把笨基准的误差减少了 27% |
+| 0 | 和闭眼猜均值一样好，特征白用了 |
+| **< 0** | **比闭眼猜均值还差**——特征帮了倒忙 |
+
+R² < 0 常见于两类情形：① 数据里根本没有信号（如股票次日收益，模型拟合到的
+"规律"其实是训练集噪声，在测试集上反而把预测推离均值）；② 训练期与测试期
+分布漂移，旧规律外推失效。**流程正确时，负 R² 是"数据无信号"的定量表述，
+不是代码 bug。**
+
+#### MSE（均方误差）——"错得多不多"（模型真正在最小化的东西）
+
+$$MSE = \frac{1}{n}\sum_{i=1}^{n}\left(y_i - \hat{y}_i\right)^2$$
+
+- 平方放大极端误差：错 2 倍 → 罚 4 倍，对异常值敏感
+- 单位是 y 的**平方**（振幅的 MSE 单位是"百分比²"），不能直接解释
+- 线性回归的 `fit()` 就是在找让 MSE 最小的系数——它既是评估指标，也是训练目标
+
+#### RMSE（均方根误差）——MSE 开根号，回到原量纲
+
+$$RMSE = \sqrt{MSE} = \sqrt{\frac{1}{n}\sum_{i=1}^{n}\left(y_i - \hat{y}_i\right)^2}$$
+
+- 单位与 y 相同，可解释性强："平均一天的预测偏差是多少"
+- 例：振幅 RMSE ≈ 0.006 → 平均偏差约 0.6 个百分点，可直接向业务方转述
+
+#### MAE（平均绝对误差）——"平均错多少"，对极端值稳健
+
+$$MAE = \frac{1}{n}\sum_{i=1}^{n}\left|y_i - \hat{y}_i\right|$$
+
+- 不平方，个别极端日的巨大误差不会被放大，比 RMSE 更稳健
+- 在 0 处不可导，手写梯度下降最小化 MAE 需要特殊处理（软绝对值/次梯度）
+
+#### 三者怎么配合用
+
+| 场景 | 用谁 | 原因 |
+|---|---|---|
+| 比较"模型有没有真本事" | R² | 无量纲，以猜均值为基准 |
+| 向业务方解释误差大小 | RMSE / MAE | 有量纲，能换算成实际含义 |
+| 数据里有极端值，怕被带偏 | MAE | 平方不放大极端误差 |
+| 训练模型本身 | MSE | 凸且光滑，梯度下降友好 |
+
+#### 进阶指标（后续课程展开）
+
+- **调整后 R²**：对特征数量施加惩罚，W13 特征选择时用
+- **方向准确率（涨跌命中率）**：把预测转成"涨/跌"二分类判断，W12 分类视角
+- **IC（信息系数）**：预测值与真实值的相关系数，量化投资评价预测力的标配，W14 回测用
+"""
+    )
 
 coef_df = pd.DataFrame({
     "特征": selected_features,
@@ -312,16 +402,19 @@ with st.spinner("SGD 训练中…"):
             losses.append((i, (error ** 2).mean()))
 
     sgd_pred = Xn_test @ w + b
-    sgd_r2 = r2_score(y_test, sgd_pred)
 
-c1, c2 = st.columns(2)
-c1.metric("SGD 测试集 R2", f"{sgd_r2:.4f}")
-c2.metric("sklearn 测试集 R2", f"{test_r2:.4f}")
+sgd_metrics = metric_row(y_test, sgd_pred)
+compare_df = pd.DataFrame({
+    "sklearn（闭式解）": metrics_df["测试集"],
+    "手写 SGD": sgd_metrics,
+})
+st.dataframe(compare_df.style.format("{:.6f}"), use_container_width=True)
 st.caption(
-    "两者几乎完全相等不是巧合：线性回归的损失函数是凸曲面，"
+    "两个模型在全部指标上几乎完全相等不是巧合：线性回归的损失函数是凸曲面，"
     "只有唯一的全局最低点。sklearn 用闭式解一步到达，"
     "手写梯度下降迭代收敛后也停在同一个点（真实差异在 1e-7 量级，"
     "显示时被四舍五入掩盖）。把迭代次数调小，就能看到两者拉开差距。"
+    "公式见第 4 节的 📐 展开。"
 )
 
 fig, ax = plt.subplots(figsize=(7, 3))

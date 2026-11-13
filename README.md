@@ -59,6 +59,9 @@ cases/
 ├── sse_daily.csv          ← 预置数据（上证指数日线+因子，fetch_data.py 生成）
 ├── linear_regression.py   ← 五步流程：数据采集 → 可视化探索 → 划分与预处理 → 建模 → 评估（双目标）
 ├── app.py                 ← Streamlit 交互探索器：调参数实时看图表变化
+├── fonts/
+│   └── NotoSansCJKsc-Regular.otf  ← 自带中文字体（Noto Sans CJK，OFL 开源协议），
+│                                    保证 Linux/Streamlit Cloud 上图表中文不乱码
 └── output/                ← 图表输出目录（运行后生成）
     ├── price_trend.png                        价格走势
     ├── next_return_dist.png                   次日收益率分布
@@ -94,7 +97,15 @@ streamlit run data-analysis/weeks/week11/cases/app.py
 python data-analysis/weeks/week11/cases/fetch_data.py
 ```
 
-输出：控制台打印各阶段指标，`output/` 目录保存 7 张图。
+输出：控制台打印各阶段指标，`output/` 目录保存图表。
+
+### 部署到 Streamlit Cloud 的注意事项
+
+- 图表中的中文依赖 `fonts/NotoSansCJKsc-Regular.otf`（已随本目录提供，OFL 开源协议）。
+  脚本会自动检测并注册该字体；**部署时务必把它连同代码一起提交到 Git 仓库**，
+  否则云端 Linux 没有微软雅黑/黑体，图内中文会显示为方框。
+- 页面正文（非图表）的中文由浏览器渲染，与字体文件无关，无需额外处理。
+- `.csv` 数据已预置，云端运行不需要 `TUSHARE_TOKEN`，也不要把 `.env` 提交到仓库。
 
 ## 数据
 

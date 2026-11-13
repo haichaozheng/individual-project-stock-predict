@@ -27,6 +27,7 @@
 
 from pathlib import Path
 
+import matplotlib.font_manager as fm
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -38,7 +39,15 @@ from sklearn.preprocessing import StandardScaler
 DATA_DIR = Path(__file__).resolve().parent
 OUT_DIR = DATA_DIR / "output"
 
-plt.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "DejaVu Sans"]
+# 中文显示：优先用仓库自带的开源字体（Noto Sans CJK，OFL 协议可自由分发）。
+# 本地 Windows 有系统字体也能画，但 Streamlit Cloud 等 Linux 环境没有
+# 微软雅黑/黑体，不自带字体的话图里中文会变成方框。
+_BUNDLED_FONT = DATA_DIR / "fonts" / "NotoSansCJKsc-Regular.otf"
+if _BUNDLED_FONT.exists():
+    fm.fontManager.addfont(str(_BUNDLED_FONT))
+    plt.rcParams["font.family"] = ["Noto Sans CJK SC", "DejaVu Sans"]
+else:
+    plt.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "DejaVu Sans"]
 plt.rcParams["axes.unicode_minus"] = False
 
 SPLIT_RATIO = 0.8  # 前 80% 训练，后 20% 测试（按时间）
@@ -329,7 +338,14 @@ def sgd_fit(X_train, y_train, X_test, y_test,
 
 def evaluate(model, X_train, y_train, X_test, y_test,
              label_col, label_name) -> float:
-    """训练/测试指标 + 预测 vs 真实散点图。返回测试 R²。"""
+    """训练/测试指标 + 预测 vs 真实散点图。返回测试 R²。
+
+    指标口径：
+      R²   = 1 - 模型误差 / 猜均值基准误差（<0 即比猜均值还差）
+      MSE  = 均方误差（平方量纲，是线性回归实际最小化的目标）
+      RMSE = √MSE（回到原量纲，"平均偏差多少"）
+      MAE  = 平均绝对误差（对极端值稳健）
+    """
     y_train_pred = model.predict(X_train)
     train_r2 = r2_score(y_train, y_train_pred)
     train_mse = mean_squared_error(y_train, y_train_pred)
@@ -337,10 +353,14 @@ def evaluate(model, X_train, y_train, X_test, y_test,
     y_test_pred = model.predict(X_test)
     test_r2 = r2_score(y_test, y_test_pred)
     test_mse = mean_squared_error(y_test, y_test_pred)
+    test_rmse = np.sqrt(test_mse)
+    test_mae = np.abs(y_test - y_test_pred).mean()
 
     print(f"\n  目标：{label_name}")
     print(f"  训练集  R2 = {train_r2:.4f}  MSE = {train_mse:.8f}")
     print(f"  测试集  R2 = {test_r2:.4f}  MSE = {test_mse:.8f}")
+    print(f"  测试集  RMSE = {test_rmse:.6f}  MAE = {test_mae:.6f}"
+          f"  （平均偏差，原量纲）")
     if label_col == "next_return":
         print("  （测试 R2 接近 0 甚至为负——收益被噪声主导，"
               "这就是'预测股价很难'的定量表述）")
