@@ -23,8 +23,12 @@ from sklearn.preprocessing import StandardScaler
 # 微软雅黑/黑体，不自带字体的话图里中文会变成方框。
 _BUNDLED_FONT = Path(__file__).resolve().parent / "fonts" / "NotoSansCJKsc-Regular.otf"
 if _BUNDLED_FONT.exists():
-    fm.fontManager.addfont(str(_BUNDLED_FONT))
-    plt.rcParams["font.family"] = ["Noto Sans CJK SC", "DejaVu Sans"]
+    try:
+        fm.fontManager.addfont(str(_BUNDLED_FONT))
+        plt.rcParams["font.family"] = ["Noto Sans CJK SC", "DejaVu Sans"]
+    except Exception:
+        # 字体文件损坏等极端情况：降级到系统字体，保证 App 不崩溃
+        plt.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "DejaVu Sans"]
 else:
     plt.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "DejaVu Sans"]
 plt.rcParams["axes.unicode_minus"] = False
@@ -85,7 +89,6 @@ def load_and_engineer() -> pd.DataFrame:
 
 
 st.set_page_config(page_title="线性回归探索器", layout="wide")
-st.title("线性回归探索器：上证指数次日收益率预测")
 
 df = load_and_engineer()
 
@@ -115,6 +118,9 @@ with st.sidebar:
 if len(selected_features) == 0:
     st.warning("请至少选择一个特征。")
     st.stop()
+
+# 主标题随侧栏所选目标联动
+st.title(f"线性回归探索器：上证指数{label_name}预测")
 
 # ── Section 0: 变量说明 ──
 with st.expander("📖 变量说明：预测目标与特征的定义、计算公式", expanded=False):

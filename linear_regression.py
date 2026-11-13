@@ -44,8 +44,12 @@ OUT_DIR = DATA_DIR / "output"
 # 微软雅黑/黑体，不自带字体的话图里中文会变成方框。
 _BUNDLED_FONT = DATA_DIR / "fonts" / "NotoSansCJKsc-Regular.otf"
 if _BUNDLED_FONT.exists():
-    fm.fontManager.addfont(str(_BUNDLED_FONT))
-    plt.rcParams["font.family"] = ["Noto Sans CJK SC", "DejaVu Sans"]
+    try:
+        fm.fontManager.addfont(str(_BUNDLED_FONT))
+        plt.rcParams["font.family"] = ["Noto Sans CJK SC", "DejaVu Sans"]
+    except Exception:
+        # 字体文件损坏等极端情况：降级到系统字体，保证脚本不崩溃
+        plt.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "DejaVu Sans"]
 else:
     plt.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "DejaVu Sans"]
 plt.rcParams["axes.unicode_minus"] = False
