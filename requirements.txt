@@ -1,2 +1,7 @@
-streamlit
+pandas
+numpy
+scikit-learn
+matplotlib
+tushare
 python-dotenv
+streamlit
