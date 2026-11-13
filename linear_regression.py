@@ -307,9 +307,15 @@ def sgd_fit(X_train, y_train, X_test, y_test,
     # 与 sklearn 对比：参数应基本一致（说明 fit 不是魔法）
     y_test_pred = X_test @ w + b
     sgd_r2 = r2_score(y_test, y_test_pred)
+    sgd_mse = mean_squared_error(y_test, y_test_pred)
+    sgd_rmse = np.sqrt(sgd_mse)
+    sgd_mae = np.abs(y_test - y_test_pred).mean()
 
     print(f"\n  手写 SGD 结果（目标：{label_name}）")
     print(f"  测试集 R2 = {sgd_r2:.4f}")
+    print(f"  测试集 MSE = {sgd_mse:.8f}  RMSE = {sgd_rmse:.6f}  "
+          f"MAE = {sgd_mae:.6f}")
+    print("  （四个指标都应与 sklearn 几乎一致——凸损失只有唯一最低点）")
 
     fig, ax = plt.subplots(figsize=(7, 4))
     iters = [l[0] for l in losses]
